@@ -1,5 +1,5 @@
 ---
-title: 👋 Hello Polar
+title: 👋 Hello Polar 🐻‍❄️
 ---
 
 Here you'll find my answers for the Senior Data Analyst Growth position.

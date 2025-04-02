@@ -1,4 +1,5 @@
 # Ecommerce Attribution
+For the following exercices I first cleaned the csv file you provided using Python and converted it into a JSONL file. Thank you Sonnet 3.7. Then I uploaded the file into a GCP bucket before creating a dataset on BigQuery.
 
 ```sql monthly_orders
 with order_events as (
@@ -24,8 +25,16 @@ FROM monthly_orders
 
 ```sql 
 with order_events as (
-    select *
-    from growth.order_events
+    
+))
+    regexp_replace(shopifyShopURL, '^https?://|/$', '') AS store,
+    shopifyOrderId AS order_id,
+    shopifyOrderProcessedAt AS order_datetime,
+    shopifyOrderTotalPrice AS order_total,
+    FORMAT_DATE('%b %Y', DATE(shopifyOrderProcessedAt)) as order_month
+from growth.pixeldata
+where shopifyOrderId is not null
+    and pagePath like '%/thank_you'
 ),
 
 monthly_orders as (
