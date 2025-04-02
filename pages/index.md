@@ -45,6 +45,17 @@ title: Welcome to Evidence
     series=category
 />
 
+```sql hello
+  select *
+  from outbound.campaigns
+```
+
+```sql tenants
+select *
+from growth.tenants
+limit 10
+```
+
 ## What's Next?
 - [Connect your data sources](settings)
 - Edit/add markdown files in the `pages` folder
