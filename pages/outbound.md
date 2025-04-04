@@ -75,8 +75,8 @@ from outbound.campaigns
   <ReferenceArea 
     xMin=15000 
     xMax=20000 
-    yMin=0 
-    yMax=15 
+    yMin=3
+    yMax=12 
     label="Optimization Needed" 
     color="warning"
     border={true}
@@ -95,9 +95,9 @@ from outbound.campaigns
   />
 
   <ReferenceArea 
-    xMin=0 
+    xMin=1000 
     xMax=6000 
-    yMin=10
+    yMin=22
     yMax=30
     label="Growth Potential" 
     color="info"
@@ -109,7 +109,7 @@ from outbound.campaigns
     xMin=0 
     xMax=5000 
     yMin=0
-    yMax=5
+    yMax=15
     label="Reconsider"
     color="negative"
     border={true}
@@ -153,7 +153,7 @@ select
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
-where campaign in ('Technology intent', 'Ask Polar Lite', 'Demo App Nurture', 'GPT V3 - French', 'Creative Studio', 'GPT V4 (GPT-4o)')
+where campaign in ('Technology intent', 'Ask Polar Lite')
 order by companies_touched desc
 ```
 <DataTable data={growth}/>
@@ -176,7 +176,7 @@ select
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
-where campaign in ('GA4', 'Loom', 'Other', 'GPT V3 - CEO')
+where campaign in ('GA4', 'Loom')
 order by companies_touched desc
 ```
 <DataTable data={optimization}/>
@@ -186,7 +186,7 @@ Action plan:
 - Develop segment-specific messaging based on industry and company size
 
 ## Low Efficiency, Low Scale (Reconsider)
-This campaign underperforms on both critical dimensions, indicating fundamental issues.
+These campaigns underperform on both critical dimensions, indicating fundamental issues.
 
 ```reconsider
 select
@@ -198,7 +198,7 @@ select
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
-where campaign in ('Fashion / Multiple Products')
+where campaign in ('Fashion / Multiple Products', 'GPT V4 (GPT-4o)', 'Creative Studio', 'GPT V3 - French')
 order by companies_touched desc
 ```
 <DataTable data={reconsider}/>
@@ -308,15 +308,15 @@ This creates a clear need for a multi-channel approach to bridge the remaining g
 # Recommended Acquisition Channel Mix
 
 ## Inbound Foundation 
-- Leverage client ecommerce data to create authoritative industry benchmarks and playbooks for each vertical (similar to [Chartmogul SaaS Benchmark Reports](https://chartmogul.com/reports/saas-benchmarks-report/), [EcommerceFuel Trends Report](https://www.ecommercefuel.com/ecommerce-trends/) or [CTC contents](https://commonthreadco.com/search?q=trend)).
-- Develop compelling case studies highlighting specific pain points and measurable outcomes, using internal resources ([example I've done with a client of mine](https://drive.google.com/file/d/19JeAdIlXAQU0cbYteE0yTBGi92ceadUo/view?usp=sharing)) or specialized services like Testimonial Hero 
+- Leverage client ecommerce data to create authoritative industry benchmarks and playbooks for each vertical (similar to [Chartmogul SaaS Benchmark Reports](https://chartmogul.com/reports/saas-benchmarks-report/), [Equals guide to SaaS Metrics](https://equals.com/guides/saas-metrics/), [EcommerceFuel Trends Report](https://www.ecommercefuel.com/ecommerce-trends/) or [CTC contents](https://commonthreadco.com/search?q=trend)).
+- Develop compelling case studies highlighting specific pain points and measurable outcomes, using internal resources ([example I've done with a client of mine](https://drive.google.com/file/d/19JeAdIlXAQU0cbYteE0yTBGi92ceadUo/view?usp=sharing)) or specialized services like [Testimonial Hero](https://www.testimonialhero.com/).
 - Amplify content through owned channels (LinkedIn, Twitter) while securing placement in targeted industry publications and podcasts.
-- Fight with Taylor Holiday on Twitter over marketing attribution.
+- Channel our inner Anakin and fight with Taylor Holiday on Twitter over marketing attribution 😏
 
 ## Paid Acquisition
 - Use paid acquisition to build broader market awareness. Could be on LinkedIn, Youtube or Reddit communities.
 - Test sponsored content in industry communities / newsletters like [EcommerceFuel](https://www.ecommercefuel.com/), [2PM](https://2pml.com/), and [draft.nu](https://draft.nu/membership/sponsor/).
-- Test sponsoring influential industry podcasts including Honest Ecommerce, The Unofficial Shopify Podcast, and Ecommerce Conversations.
+- Test sponsoring influential industry podcasts like [Honest Ecommerce](https://honestecommerce.co/), [The Unofficial Shopify Podcast](https://unofficialshopifypodcast.com/), and [Ecommerce Conversations](https://www.practicalecommerce.com/tag/podcasts).
 
 ## Enhanced Outbound Approach 
 - Scale highest-performing campaigns  with refined targeting

@@ -1,5 +1,5 @@
 # Ecommerce Attribution
-For the following exercices I first cleaned the csv file you provided using Python and converted it into a JSONL file. Thank you Sonnet 3.7. Then I uploaded the file into a GCP bucket before creating a dataset in BigQuery.
+For the following exercises, I first cleaned the CSV file using Python and converted it into a JSONL file. (Thank you, Sonnet 3.7.) Then, I uploaded the file to a GCP bucket before creating a dataset in BigQuery.
 
 ## Number of orders per month per store
 
@@ -39,13 +39,15 @@ FROM monthly_orders
     chartAreaHeight=350
 />
 
-### Key findings
+<DataTable data={monthly_orders}/>
+
+### Key Findings
 - Strong seasonal pattern with peak revenue during Nov-Dec 2022 holiday season (BFCM + Christmas)
 - Significant drop in Jan 2023 showing typical post-holiday slump
 - AOV highest during Nov-Dec ($251) and dropped to ~$205 in Jan-Feb as customers were likely more price-sensitive
 - Gradual recovery in both order volume and AOV through Spring 2023
 
-<Details title="Query used to calculate the number of orders per month per store">
+<Details title="SQL Query used to calculate the number of orders per month per store">
 
 ```sql
 WITH orders AS (
@@ -56,7 +58,7 @@ WITH orders AS (
     FORMAT_DATE('%b %Y', DATE(shopifyOrderProcessedAt)) as order_month,
     shopifyOrderTotalPrice AS order_total,
     ROW_NUMBER() OVER(PARTITION BY shopifyOrderId ORDER BY shopifyOrderProcessedAt) AS row_num
-  FROM `polar-455513.growth.pixeldata`
+  FROM growth.pixeldata
   WHERE shopifyOrderId IS NOT NULL
     AND pagePath LIKE '%/thank_you'
 ),
@@ -78,111 +80,65 @@ SELECT * FROM monthly_orders
 
 ```
 
-It also addresses several important data quality considerations:
+This query addresses several important data quality considerations:
 
 1. Normalizes store URLs to ensure consistent grouping regardless of URL format
 2. Filters for actual conversion events using the `thank_you` page path, avoiding duplicate counting from order status checks
-3. Deduplicates multiple pixel events for the same order ID by using ROW_NUMBER() and selecting only the first occurrence
+3. Deduplicates multiple pixel events for the same order ID by using `ROW_NUMBER()` and selecting only the first occurrence
 4. Takes the earliest order record when multiple events exist, ensuring consistent handling of duplicates
 5. Calculates key metrics like order count, total revenue, and average order value
 
 </Details>
 
-## Attribution modelling
-Before choosing an attribution model I want to know many touchpoints users have before conversion using a 30-day windows. I'm using this windows arbitraly since the main product of this store is Milk Maker with historical AOV of this store is between 200 - 250 USD. My guess is that it's not an impulse buy and customers might visit the store over a few days before placing an order.
+## Attribution Modelling
 
-First let's use the previous query we've used to find out all unique orders:
+Before choosing an attribution model, let's analyze how many touchpoints customers have within a 30-day window before purchasing.
 
-```sql
-WITH orders AS (
-  SELECT 
-    shopifyOrderId AS order_id,
-    TIMESTAMP_MILLIS(CAST(timestamp AS INT64)) AS order_timestamp,
-    ip,
-    ROW_NUMBER() OVER(PARTITION BY shopifyOrderId ORDER BY shopifyOrderProcessedAt) AS row_num
-  FROM `polar-455513.growth.pixeldata`
-  WHERE shopifyOrderId IS NOT NULL
-    AND pagePath LIKE '%/thank_you'
-)
+My hypothesis is that with an AOV over $200, Almond Cow's customers visit the store multiple times before committing to purchase, as this represents a considered decision rather than an impulse buy.
+
+After analyzing the data for orders placed from January 2023 onward (ensuring complete 30-day lookback data), the results confirmed my hypothesis:
+
+
+
+```sql session_distribution
+select *
+from growth.session_distribution
+```
+<BarChart 
+    data={session_distribution}
+    title="Nearly 50% of all customers interact with the brand through multiple sessions"
+    x=session_count_group
+    xAxisTitle="Number of sessions"
+    y=percentage
+    series=session_count_group
+    yFmt=pct
+    yMax=1
+    swapXY=true
+/>
+
+As we can see in the above chart, nearly half of all customers interact with the brand through multiple sessions before purchasing. This multi-touch behavior makes sense for a premium product like a milk maker, where customers likely research recipes, explore features, and consider their options across multiple visits.
+
+### Attribution Model Selection
+Based on these findings, I've decided to implement a position-based (U-shaped) attribution model, which:
+- Gives 40% credit to the first touchpoint (discovery)
+- Gives 40% credit to the last touchpoint (conversion)
+- Distributes the remaining 20% across middle touchpoints
+
+This model properly recognizes both the critical discovery phase and the final conversion decision, while still acknowledging the nurturing effect of middle interactions. For single-session journeys, the source simply receives 100% of the credit.
+
+```sql attribution
+select *
+from growth.u_model
+limit 10
 ```
 
-Then let's add a CTE to get all pageviews within 30 days before each order:
+<DataTable  data={attribution} >
+  <Column id="source" wrap=true />
+  <Column id="2023-01" fmt=usd0k />
+  <Column id="2023-02" fmt=usd0k />
+  <Column id="2023-03" fmt=usd0k />
+  <Column id="2023-04" fmt=usd0k />
+  <Column id="2023-05" fmt=usd0k />
+  <Column id="2023-06" fmt=usd0k />
+</DataTable>
 
-```sql
-pre_purchase_events AS (
-  SELECT
-    o.order_id AS shopifyOrderId,
-    o.order_timestamp,
-    o.ip,
-    p.timestamp AS event_timestamp,
-    TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) AS event_timestamp_formatted,
-    p.sessionId,
-    COALESCE(p.utmSource, 
-      CASE 
-        WHEN p.pageReferrer IS NULL OR p.pageReferrer = '' THEN 'direct'
-        ELSE REGEXP_EXTRACT(p.pageReferrer, 'http[s]?://([^/]*)') 
-      END) AS source
-  FROM orders o
-  JOIN `polar-455513.growth.pixeldata` p
-    ON o.ip = p.ip
-    AND TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) <= o.order_timestamp
-    AND TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) >= TIMESTAMP_SUB(o.order_timestamp, INTERVAL 30 DAY)
-  WHERE o.row_num = 1
-)
-```
-
-Then another CTE to add previous timstramp using a `LAG()` function to calculate gaps for session grouping:
-
-```sql
-with_prev_timestamp AS (
-  SELECT
-    *,
-    LAG(event_timestamp_formatted) OVER(PARTITION BY shopifyOrderId, ip ORDER BY event_timestamp) AS prev_timestamp
-  FROM pre_purchase_events
-)
-```
-
-Then 2 more CTEs to mark session boundaries with a gap superior at 30 minutes then create session groups by cumulative sum of boundaries:
-
-```sql
-session_boundaries AS (
-  SELECT
-    *,
-    CASE 
-      WHEN prev_timestamp IS NULL OR 
-           TIMESTAMP_DIFF(event_timestamp_formatted, prev_timestamp, SECOND) > 1800 
-      THEN 1 
-      ELSE 0 
-    END AS is_new_session
-  FROM with_prev_timestamp
-),
-
-session_groups AS (
-  SELECT
-    *,
-    SUM(is_new_session) OVER(PARTITION BY shopifyOrderId, ip ORDER BY event_timestamp) AS session_number
-  FROM session_boundaries
-)
-```
-
-Let's check that everything is working using the order id `4543812534424`:
-
-```sql check
-select
-    ip,
-    sessionId,
-    pagePath,
-    source,
-    is_new_session,
-    session_number
-from growth.orders_with_prev_timestamp
-where shopifyOrderId = '4543812534424'
-```
-
-We can see that this customers had 3 distinct sessions over 3 days before purchasing:
-
-- Session 1: January 8th - Browsed the glass jug and milk machine products
-- Session 2: January 9th - Looked at the milk machine again and almonds
-- Session 3: January 11th - Started from Facebook, used a discount code, viewed multiple products, and finally purchased.
-
-Now we could finish 
