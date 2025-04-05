@@ -8,14 +8,31 @@ The growth team at Polar is responsible for lead generation, with the sales team
 Given these goals, the ideal Top KPI for the outbound campaigns is **Pipeline Value per Company Touched** because it:
 
 - Directly measures how efficiently outbound efforts generate pipeline value
-- Aligns with the growth team's primary goal of creating opportunities for the sales team and keeps it accountable
+- Aligns with the growth team's primary goal of creating opportunities for the sales team and while keeping it accountable
 - Accounts for both the quality and quantity of outreach
 
 This metric is calculated as follows:
 > Pipeline Value Created / Companies Touched
 
+```sql pipeline_value_company
+select
+  CAMPAIGN_GROUP as campaign,
+  PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
+  NB_COMPANIES_TOUCHED as companies_touched,
+  (PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED) as pipeline_value_per_company_touched
+from outbound.campaigns
+order by 2 desc
+```
+
+<DataTable data={pipeline_value_company} wrapTitles=true totalRow=true>
+  <Column id=campaign />
+  <Column id=pipeline_value_created fmt=usd />
+  <Column id=companies_touched />
+  <Column id=pipeline_value_per_company_touched fmt=usd contentType=bar totalAgg="average of $8.7"/>
+</DataTable>
+
 ## Supporting Metrics
-While Pipeline Value per Company Touched is the primary metric, I recommend tracking these supporting metrics to provide context:
+While Pipeline Value per Company Touched is the primary metric, I recommend tracking these supporting metrics to provide additional context:
 
 ### Pipeline Revenue Win Rate
 While the growth team does not own this metric, it measures how effectively the sales team converts pipeline opportunities into actual revenue. It highlights alignment between growth and sales teams and identifies which types of opportunities close at a higher rate.
@@ -23,11 +40,46 @@ While the growth team does not own this metric, it measures how effectively the 
 This metric is calculated as follows:
 > ARR Value Created / Pipeline Value Created
 
+```sql pipeline_win_rate
+select
+  CAMPAIGN_GROUP as campaign,
+  PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME / PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_revenue_win_rate
+from outbound.campaigns
+order by 2 desc
+```
+
+<DataTable data={pipeline_win_rate} wrapTitles=true totalRow=true>
+  <Column id=campaign />
+  <Column id=pipeline_value_created fmt=usd0 />
+  <Column id=arr_value_created fmt=usd0 />
+  <Column id=pipeline_revenue_win_rate totalAgg="average of 53.30%" fmt=pct />
+</DataTable>
+
 ### ARR Value per Company Touched
 This metric shows the complete business impact of outbound efforts, capturing both pipeline generation efficiency and sales conversion effectiveness.
 
 This metric is calculated as follows:
 > ARR Value Created / Companies Touched
+
+```sql arr_value_company
+select
+  CAMPAIGN_GROUP as campaign,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
+  NB_COMPANIES_TOUCHED as companies_touched,
+  NEW_ARR_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as arr_per_company_touched
+from outbound.campaigns
+order by 2 desc
+```
+
+<DataTable data={arr_value_company} wrapTitles=true totalRow=true >
+  <Column id=campaign />
+  <Column id=arr_value_created fmt=usd0 />
+  <Column id=companies_touched  />
+  <Column id=arr_per_company_touched fmt=usd totalAgg="average of $4.64" />
+</DataTable> 
+
 
 ### ICP Targeting Accuracy
 This metric measures how well campaigns focus on the Ideal Customer Profile (ICP).
@@ -35,19 +87,23 @@ This metric measures how well campaigns focus on the Ideal Customer Profile (ICP
 This metric is calculated as follows:
 > (ICP Companies Touched / Companies Touched) × 100%
 
-```sql campaigns
+```sql icp_targeting
 select
   CAMPAIGN_GROUP as campaign,
-  PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
-  NEW_ARR_FROM_OB_ALL_TIME as aar_value_created,
   NB_COMPANIES_TOUCHED as companies_touched,
-  PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company,
-  NEW_ARR_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as aar_per_company,
-  (NB_COMPANIES_TOUCHED_ICP / NB_COMPANIES_TOUCHED) as icp_targeting_accuracy
+  NB_COMPANIES_TOUCHED_ICP as icp_companies_touched,
+  NB_COMPANIES_TOUCHED_ICP / NB_COMPANIES_TOUCHED as icp_targeting_accuracy
 from outbound.campaigns
-order by pipeline_value_created desc
+order by 2 desc
 ```
-<DataTable data={campaigns} />
+
+<DataTable data={icp_targeting} wrapTitles=true totalRow=true >
+  <Column id=campaign />
+  <Column id=companies_touched />
+  <Column id=icp_companies_touched  />
+  <Column id=icp_targeting_accuracy fmt=pct totalAgg="average of 49%" />
+</DataTable> 
+
 
 # Top Performing Campaigns
 To properly evaluate campaign performance, we must consider both efficiency (Pipeline Value per Company Touched), scale (number of companies touched), and impact (total pipeline generated) using a matrix bubble chart:
@@ -59,6 +115,7 @@ select
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company
 from outbound.campaigns
+order by companies_touched desc
 ```
 
 <BubbleChart
@@ -67,11 +124,19 @@ from outbound.campaigns
   y=pipeline_value_per_company
   series=campaign
   size=pipeline_value_created
-  yMin=0
-  xMin=0
   yFmt=usd
+  yMin=0
   chartAreaHeight=350
+  xLabelWrap=true
 >
+  <ReferenceLine
+    x=7500
+    label="Average Companies Touched"
+  />
+  <ReferenceLine
+    y=8.70
+    label="Average Pipeline Value"
+  />
   <ReferenceArea 
     xMin=15000 
     xMax=20000 
@@ -126,7 +191,7 @@ select
   NB_COMPANIES_TOUCHED as companies_touched,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company,
-  NEW_ARR_FROM_OB_ALL_TIME as aar_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
@@ -149,7 +214,7 @@ select
   NB_COMPANIES_TOUCHED as companies_touched,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company,
-  NEW_ARR_FROM_OB_ALL_TIME as aar_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
@@ -172,7 +237,7 @@ select
   NB_COMPANIES_TOUCHED as companies_touched,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company,
-  NEW_ARR_FROM_OB_ALL_TIME as aar_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
@@ -194,7 +259,7 @@ select
   NB_COMPANIES_TOUCHED as companies_touched,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME as pipeline_value_created,
   PIPELINE_OPP_AMOUNT_FROM_OB_ALL_TIME / NB_COMPANIES_TOUCHED as pipeline_value_per_company,
-  NEW_ARR_FROM_OB_ALL_TIME as aar_value_created,
+  NEW_ARR_FROM_OB_ALL_TIME as arr_value_created,
   NB_CUSTOMERS_FROM_OB_ALL_TIME as accounts_acquired,
   NEW_ARR_FROM_OB_ALL_TIME / NB_CUSTOMERS_FROM_OB_ALL_TIME as avg_deal_size
 from outbound.campaigns
@@ -220,62 +285,62 @@ The TAM of Polar consists of 127,000 Shopify merchants with a GMV between $1M an
 | $100-500M | 319 | 0.25% |
 
 ## Outbound Opportunity Sizing
-To estimate the potential New ARR from scaling outbound to our entire TAM, I'll use a simplified approach applying the average deal size from previous outbound campaigns to different conversion rate scenarios.
+To estimate the potential New ARR from scaling outbound to our entire TAM, I'll use an approach that aligns with the Top KPI I previously defined: Pipeline Value per Company Touched.
 
-```sql outbound_campaigns
-select
-  sum(NB_COMPANIES_TOUCHED) as companies_touched,
-  sum(NEW_ARR_FROM_OB_ALL_TIME) as aar_value_created,
-  sum(NB_CUSTOMERS_FROM_OB_ALL_TIME) as accounts_acquired,
-  sum(NB_CUSTOMERS_FROM_OB_ALL_TIME) / sum(NB_COMPANIES_TOUCHED) as conversion_rate,
-  sum(NEW_ARR_FROM_OB_ALL_TIME) / sum(NB_CUSTOMERS_FROM_OB_ALL_TIME) as average_deal_size
-from outbound.campaigns
-```
-<DataTable data={outbound_campaigns}/>
+> Potential New ARR = (TAM × Pipeline Value per Company Touched) × Pipeline Revenue Win Rate
+
+- TAM = 127,000 Shopify merchants with GMV between $1M and $500M
+- Pipeline Value per Company Touched varies by scenario (based on campaign performance)
+- Pipeline Revenue Win Rate = 53.3% (derived from historical data)
+
+This ensures methodological consistency between how we measure campaign performance and how we forecast future opportunity
 
 ### Key Caveats
-- **Conversion rate based on overlapped data**: Calculated conversion rate (0.042%) is based on raw campaign data where some companies may have been counted multiple times across different campaigns.
+- **Data limited to historical performance**: This analysis assumes future campaigns will perform similarly to past ones, which may not account for market changes, or diminishing returns as we scale.
 
-- **Varying conversion by GMV tier**: Different GMV tiers likely have different propensities to convert, though our current data doesn't explicitly segment performance by customer size.
+- **Varying conversion by GMV tier**:  Different GMV tiers likely have different propensities to convert, though our current data doesn't explicitly segment performance by customer size.
 
-- **Blended approach**: I'm using overall conversion rates and applying our historical average deal size ($11,147) uniformly across all customer segments, which simplifies the analysis but may not reflect segment-specific differences.
+- **Pipeline-to-revenue conversion**: We use the historical Pipeline Revenue Win Rate (53.3%) to convert pipeline into ARR, which assumes the sales team will maintain similar close rates at scale.
+
+- **Market saturation effects**: This analysis doesn't account for potential saturation effects from repeatedly targeting the same TAM with similar messaging.
 
 ## Opportunity Size Calculations
 ### Conservative Scenario
-Using our overall observed conversion rate (0.042%):
+Using our average Pipeline Value per Company Touched ($8.70):
 
-| TAM | Conversion Rate | New Customers | Historical ACV | Potential ARR |
-| --- | --------------- | ------------- | -------------- | ------------- |
-| 127,000 | 0.042% | 53 | $11,147 | $591,000 |
+| TAM | Pipeline Value/Company | Pipeline Value | Pipeline Revenue Win Rate | Potential ARR |
+| --- | ---------------------- | -------------- | ------------------------- | ------------- |
+| 127,000 | $8.70 | $1,104,900 | 53.3% | $588,965 |
 
 ### Moderate Scenario
-Using a slightly improved conversion rate (0.06%):
+Using a midpoint value between average and top performers ($12.85):
 
-| TAM | Conversion Rate | New Customers | Historical ACV | Potential ARR |
-| --- | --------------- | ------------- | -------------- | ------------- |
-| 127,000 | 0.06% | 76 | $11,147 | $847,000 |
+| TAM | Pipeline Value/Company | Pipeline Value | Pipeline Revenue Win Rate | Potential ARR |
+| --- | ---------------------- | -------------- | ------------------------- | ------------- |
+| 127,000 | $12.85 | $1,631,950 | 53.3% | $869,881 |
 
 ### Optimistic Scenario
-Using the conversion rate from our best-performing campaigns (0.13%): 
+Using values from our best-performing campaigns ($17.00):
 
-| TAM | Conversion Rate | New Customers | Historical ACV | Potential ARR |
-| --- | --------------- | ------------- | -------------- | ------------- |
-| 127,000 | 0.13% | 165 | $11,147 | $1,839,000 |
+| TAM | Pipeline Value/Company | Pipeline Value | Pipeline Revenue Win Rate | Potential ARR |
+| --- | ---------------------- | -------------- | ------------------------- | ------------- |
+| 127,000 | $17.00 | $2,159,000| 53.3% | $1,150,798 |
+
 
 ## Accounting for Sales Capacity
 Current sales capacity: 7 quota-carrying reps × $600K quota = $4.2M yearly capacity
 
 All scenarios fall well within our current sales capacity:
 
-- Conservative scenario: $591,000 (14.1% of capacity)
-- Moderate scenario: $847,000 (20.2% of capacity)
-- Optimistic scenario: $1,839,000 (43.8% of capacity)
+- Conservative scenario: $588,965 (14.0% of capacity)
+- Moderate scenario: $869,881 (20.7% of capacity)
+- Optimistic scenario: $1,150,798 (27.4% of capacity)
 
-This analysis suggests that scaling our outbound efforts to our entire TAM could generate between $591K and $1.84M in new ARR. This represents a significant achievable growth opportunity that can be handled by the current sales team capacity.
+This analysis suggests that scaling our outbound efforts to our entire TAM could generate between $589K and $1.15M in new ARR. This represents a significant achievable growth opportunity that can be handled by the current sales team capacity.
 
 # Prioritizing Outbound as a Growth Lever
 ## Current Growth Challenge
-Polar currently generates $3M in ARR but aims to reach $10M by year-end. This requires an additional $7M in net new ARR. My analysis shows that even with optimistic projections, outbound strategies alone will only deliver between $847K-$1.84M in new ARR.
+Polar currently generates $3M in ARR but aims to reach $10M by year-end. This requires an additional $7M in net new ARR. My analysis shows that even with optimistic projections, outbound strategies alone will only deliver between $870K-$1.15M in new ARR.
 
 This creates a clear need for a multi-channel approach to bridge the remaining gap.
 
