@@ -8,7 +8,7 @@ The growth team at Polar is responsible for lead generation, with the sales team
 Given these goals, the ideal Top KPI for the outbound campaigns is **Pipeline Value per Company Touched** because it:
 
 - Directly measures how efficiently outbound efforts generate pipeline value
-- Aligns with the growth team's primary goal of creating opportunities for the sales team and while keeping it accountable
+- Aligns with the growth team's primary goal of creating opportunities for the sales team while keeping it accountable
 - Accounts for both the quality and quantity of outreach
 
 This metric is calculated as follows:
@@ -183,7 +183,7 @@ order by companies_touched desc
 </BubbleChart>
 
 ## Best Overall Performers
-These campaigns generate substantial pipeline with good efficiency, striking a balance between reach and performance.
+These campaigns generate a substantial pipeline with good efficiency, striking a balance between reach and performance.
 
 ```best
 select
@@ -201,7 +201,7 @@ order by companies_touched desc
 <DataTable data={best}/>
 
 Action Plan:
-- Conduct segmentation analysis to identify highest-performing subgroups
+- Conduct segmentation analysis to the highest-performing subgroups
 - Optimize messaging and improve efficiency
 - Maintain current scale while working to push efficiency metrics above $25 per company
 
@@ -362,13 +362,13 @@ This creates a clear need for a multi-channel approach to bridge the remaining g
 ### Inbound: Building Sustainable Growth Engines
 - Particularly effective for reaching the mid-market (1-10M GMV) segment
 - Establishes thought leadership and brand authority
-- Generates content like case studies and benchmarks that enhances outbound campaigns and sales enablement
+- Generates content like case studies and benchmarks that enhance outbound campaigns and sales enablement
 
 ### Paid Acquisition: Accelerating Growth and Awareness
 - Enables rapid testing and optimization cycles
 - Builds broader market awareness
 - Allows precise targeting parameters to reach specific ICPs
-- Extends reach beyond existing Storeleads database
+- Extends reach beyond the existing Storeleads database
 
 # Recommended Acquisition Channel Mix
 
