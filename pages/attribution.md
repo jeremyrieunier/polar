@@ -311,7 +311,9 @@ limit 10
     y2=percentage_total
     y2Fmt=pct
     y2SeriesType=line
+    chartAreaHeight=350
 />
+
 
 <DataTable  data={attribution} totalRow=true >
   <Column id=source_group />
