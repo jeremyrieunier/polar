@@ -300,7 +300,7 @@ This ensures methodological consistency between how we measure campaign performa
 
 - **Varying conversion by GMV tier**:  Different GMV tiers likely have different propensities to convert, though our current data doesn't explicitly segment performance by customer size.
 
-- **Pipeline-to-revenue conversion**: We use the historical Pipeline Revenue Win Rate (53.3%) to convert pipeline into ARR, which assumes the sales team will maintain similar close rates at scale.
+- **Pipeline-to-revenue conversion**: I use the historical Pipeline Revenue Win Rate (53.3%) to convert pipeline into ARR, which assumes the sales team will maintain similar close rates at scale.
 
 - **Market saturation effects**: This analysis doesn't account for potential saturation effects from repeatedly targeting the same TAM with similar messaging.
 
@@ -354,7 +354,7 @@ This creates a clear need for a multi-channel approach to bridge the remaining g
 - Proven success with campaigns like Technology Intent and Klaviyo Flows Enrich
 
 **Key Challenges**
-- With 127,000 total merchants and 15,000 monthly contacts, we risk exhausting our addressable ICP
+- With 127,000 total merchants and infrastructures to reach 15,000 monthly contacts, we risk exhausting our addressable ICP
 - Increased volume may trigger email spam filters and harm domain reputation
 - Maintaining quality at higher volumes becomes increasingly difficult beyond certain volumes
 - Contact information accuracy diminishes over time, with a potential impact on email deliverability

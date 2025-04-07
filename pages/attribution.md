@@ -39,7 +39,14 @@ FROM monthly_orders
     chartAreaHeight=350
 />
 
-<DataTable data={monthly_orders}/>
+<DataTable data={monthly_orders} totalRow=true >
+  <Column id=store />
+  <Column id=order_month />
+  <Column id=order_count />
+  <Column id=total_revenue fmt=usd0 />
+  <Column id=avg_order_value totalAgg="average of $225.65" />
+</DataTable>
+
 
 ### Key Findings
 - Strong seasonal pattern with peak revenue during Nov-Dec 2022 holiday season (BFCM + Christmas)
@@ -94,29 +101,191 @@ This query addresses several important data quality considerations:
 
 Before choosing an attribution model, let's analyze how many touchpoints customers have within a 30-day window before purchasing.
 
-My hypothesis is that with an AOV over $200, Almond Cow's customers visit the store multiple times before committing to purchase, as this represents a considered decision rather than an impulse buy.
+My hypothesis is that with an AOV over $225, Almond Cow's customers visit the store multiple times before committing to purchase, as this represents a considered decision rather than an impulse buy.
 
 After analyzing the data for orders placed from January 2023 onward (ensuring complete 30-day lookback data), the results confirmed my hypothesis:
-
-
 
 ```sql session_distribution
 select *
 from growth.session_distribution
 ```
-<BarChart 
-    data={session_distribution}
-    title="Nearly 50% of all customers interact with the brand through multiple sessions"
-    x=session_count_group
-    xAxisTitle="Number of sessions"
-    y=percentage
-    series=session_count_group
-    yFmt=pct
-    yMax=1
-    swapXY=true
+
+```sql pie_data
+select
+  concat(session_count_group, ' session(s)') as name,
+  order_count as value
+from ${session_distribution}
+```
+
+#### Nearly 50% of all customers interact with the brand through multiple sessions
+<ECharts config={
+    {
+        tooltip: {
+            formatter: '{b} session(s): {c} ({d}%)'
+        },
+        series: [
+        {
+          type: 'pie',
+          data: [...pie_data],
+        }
+      ]
+      }
+    }
 />
 
+
 As we can see in the above chart, nearly half of all customers interact with the brand through multiple sessions before purchasing. This multi-touch behavior makes sense for a premium product like a milk maker, where customers likely research recipes, explore features, and consider their options across multiple visits.
+
+<Details title="SQL Query used to find how many touchpoints customers have">
+
+First, I wrote a CTE to get all order data, making sure to filter only for "thank you" pages and orders from January 2023 onwards. I'm using a 30-day lookback window, and the first events in the dataset were triggered around November 24th, so starting from January gives us complete lookback data for all orders.
+
+I also used the `ROW_NUMBER()` function to handle potential duplicate order events by assigning a sequence number to each order record:
+
+
+```sql
+WITH order_events AS (
+  SELECT
+    shopifyOrderId,
+    TIMESTAMP_MILLIS(CAST(timestamp AS INT64)) AS order_timestamp,
+    DATE(shopifyOrderProcessedAt) AS order_datetime,
+    shopifyOrderTotalPrice AS order_total,
+    ip,
+    ROW_NUMBER() OVER(PARTITION BY shopifyOrderId ORDER BY timestamp) AS row_num
+  FROM `polar-455513.growth.pixeldata`
+  WHERE 
+    shopifyOrderId IS NOT NULL
+    AND pagePath LIKE '%/thank_you'
+    AND DATE(shopifyOrderProcessedAt) >= '2023-01-01'
+),
+
+unique_orders AS (
+  SELECT
+    shopifyOrderId,
+    order_timestamp,
+    order_datetime,
+    order_total,
+    ip
+  FROM order_events
+  WHERE row_num = 1
+)
+```
+
+I then created a second CTE to keep only unique orders by filtering for `row_num = 1`, ensuring I count each order exactly once:
+
+```sql
+unique_orders AS (
+  SELECT shopifyOrderId, order_timestamp, order_datetime, order_total, ip
+  FROM order_events
+  WHERE row_num = 1
+)
+```
+
+Next, I joined the unique orders with all the pixel data to find every interaction that happened within 30 days before each purchase. I'm using the IP address to connect users to their events and adding logic to determine the traffic source:
+
+```sql
+pre_purchase_events AS (
+  SELECT
+    o.shopifyOrderId,
+    o.order_timestamp,
+    o.order_datetime,
+    o.order_total,
+    o.ip,
+    p.timestamp AS event_timestamp,
+    TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) AS event_timestamp_formatted,
+    p.pagePath,
+    p.utmSource,
+    p.pageReferrer,
+    COALESCE(p.utmSource, 
+      CASE 
+        WHEN p.pageReferrer IS NULL OR p.pageReferrer = '' OR p.pageReferrer LIKE '%almondcow.co%' THEN 'direct'
+        ELSE REGEXP_EXTRACT(REGEXP_EXTRACT(p.pageReferrer, 'http[s]?://([^/]*)'), '([^.]+\\.[^.]+)$') 
+      END) AS source
+  FROM unique_orders o
+  JOIN `polar-455513.growth.pixeldata` p
+    ON o.ip = p.ip
+    AND TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) <= o.order_timestamp
+    AND TIMESTAMP_MILLIS(CAST(p.timestamp AS INT64)) >= TIMESTAMP_SUB(o.order_timestamp, INTERVAL 30 DAY)
+),
+```
+
+This is where I implemented the session logic. I first used a `LAG()` function to find the previous timestamp for each event:
+
+```sql
+with_prev_timestamp AS (
+  SELECT
+    *,
+    LAG(event_timestamp_formatted) OVER(PARTITION BY shopifyOrderId, ip ORDER BY event_timestamp) AS prev_timestamp
+  FROM pre_purchase_events
+),
+```
+
+Then I marked session boundaries when there's a gap of more than 30 minutes between events:
+
+```sql
+session_boundaries AS (
+  SELECT
+    *,
+    CASE 
+      WHEN prev_timestamp IS NULL OR 
+           TIMESTAMP_DIFF(event_timestamp_formatted, prev_timestamp, SECOND) > 1800 
+      THEN 1 
+      ELSE 0 
+    END AS is_new_session
+  FROM with_prev_timestamp
+),
+```
+
+I then used a cumulative sum to assign a consistent session number to all events in the same session:
+```sql
+session_groups AS (
+  SELECT
+    *,
+    SUM(is_new_session) OVER(PARTITION BY shopifyOrderId, ip ORDER BY event_timestamp) AS session_number
+  FROM session_boundaries
+),
+```
+
+For each session, I identifed the entry source (first touchpoint), session duration, and interaction count:
+```sql
+session_sources AS (
+  SELECT
+    shopifyOrderId,
+    ip,
+    session_number,
+    ARRAY_AGG(source ORDER BY event_timestamp ASC LIMIT 1)[OFFSET(0)] AS session_source,
+    MIN(event_timestamp_formatted) AS session_start,
+    MAX(event_timestamp_formatted) AS session_end,
+    COUNT(*) AS interactions_in_session
+  FROM session_groups
+  GROUP BY shopifyOrderId, ip, session_number
+)
+```
+
+I then counted sessions per order and constructed the customer journey path:
+```sql
+session_counts_per_order AS (
+  SELECT
+    shopifyOrderId,
+    COUNT(*) AS session_count,
+    STRING_AGG(session_source, ' > ' ORDER BY session_start) AS source_path
+  FROM session_sources
+  GROUP BY shopifyOrderId
+)
+```
+
+Finally, I created a distribution to see how many touchpoints customers typically have before purchasing:
+```sql
+session_distribution AS (
+  SELECT
+    CASE WHEN session_count >= 5 THEN '5+' ELSE CAST(session_count AS STRING) END AS session_count_group,
+    COUNT(*) AS order_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS percentage
+  FROM session_counts_per_order
+  GROUP BY session_count_group
+)
+```
+</Details>
 
 ### Attribution Model Selection
 Based on these findings, I've decided to implement a position-based (U-shaped) attribution model, which:
@@ -132,13 +301,19 @@ from growth.u_model
 limit 10
 ```
 
-<DataTable  data={attribution} >
-  <Column id="source" wrap=true />
-  <Column id="2023-01" fmt=usd0k />
-  <Column id="2023-02" fmt=usd0k />
-  <Column id="2023-03" fmt=usd0k />
-  <Column id="2023-04" fmt=usd0k />
-  <Column id="2023-05" fmt=usd0k />
-  <Column id="2023-06" fmt=usd0k />
+<BarChart 
+    data={attribution} 
+    x=source_group
+    y=attributed_revenue
+    yFmt=usd0k
+    y2=percentage_total
+    y2Fmt=pct
+    y2SeriesType=line
+/>
+
+<DataTable  data={attribution} totalRow=true >
+  <Column id=source_group />
+  <Column id=attributed_revenue  fmt=usd0/>
+  <Column id=percentage_total fmt=pct />
 </DataTable>
 

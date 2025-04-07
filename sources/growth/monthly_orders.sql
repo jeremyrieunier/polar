@@ -1,27 +1,27 @@
-WITH orders AS (
-  SELECT 
-    REGEXP_REPLACE(shopifyShopURL, '^https?://|/$', '') AS store,
-    shopifyOrderId AS order_id,
-    DATE(shopifyOrderProcessedAt) AS order_date,
-    FORMAT_DATE('%b %Y', DATE(shopifyOrderProcessedAt)) as order_month,
-    shopifyOrderTotalPrice AS order_total,
-    ROW_NUMBER() OVER(PARTITION BY shopifyOrderId ORDER BY shopifyOrderProcessedAt) AS row_num
-  FROM growth.pixeldata
-  WHERE shopifyOrderId IS NOT NULL
-    AND pagePath LIKE '%/thank_you'
+with orders as (
+  select 
+    regexp_replace(shopifyshopurl, '^https?://|/$', '') as store,
+    shopifyorderid as order_id,
+    date(shopifyorderprocessedat) as order_date,
+    format_date('%b %y', date(shopifyorderprocessedat)) as order_month,
+    shopifyordertotalprice as order_total,
+    row_number() over(partition by shopifyorderid order by shopifyorderprocessedat) as row_num
+  from growth.pixeldata
+  where shopifyorderid is not null
+    and pagepath like '%/thank_you'
 ),
 
-monthly_orders AS (
-  SELECT
+monthly_orders as (
+  select
     store,
     order_month,
-    COUNT(*) AS order_count,
-    ROUND(SUM(order_total), 2) AS total_revenue,
-    ROUND(SUM(order_total) / COUNT(*), 2) AS avg_order_value
-  FROM orders
-  WHERE row_num = 1
-  GROUP BY store, order_month
-  ORDER BY store, PARSE_DATE('%b %Y', order_month)
+    count(*) as order_count,
+    round(sum(order_total), 2) as total_revenue,
+    round(sum(order_total) / count(*), 2) as avg_order_value
+  from orders
+  where row_num = 1
+  group by store, order_month
+  order by store, parse_date('%b %y', order_month)
 )
 
-SELECT * FROM monthly_orders
+select * from monthly_orders

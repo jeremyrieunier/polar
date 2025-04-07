@@ -8,7 +8,7 @@ WITH order_events AS (
     FORMAT_DATE('%Y-%m', DATE(shopifyOrderProcessedAt)) AS order_month,
     ip,
     ROW_NUMBER() OVER(PARTITION BY shopifyOrderId ORDER BY timestamp) AS row_num
-  FROM `polar-455513.growth.pixeldata`
+  FROM growth.pixeldata
   WHERE 
     shopifyOrderId IS NOT NULL
     AND pagePath LIKE '%/thank_you'
@@ -143,7 +143,7 @@ session_counts AS (
 ),
 
 -- Step 10: Create session-level detail with attribution weights
-session_attribution AS (
+session_attribution_raw AS (
   SELECT
     s.shopifyOrderId,
     s.order_total,
@@ -155,11 +155,18 @@ session_attribution AS (
     l.last_touch_source,
     CASE
       WHEN c.session_count = 1 THEN 1.0  -- 100% to single source
-      WHEN s.session_source = f.first_touch_source AND s.session_source = l.last_touch_source THEN 1.0  -- Edge case: same source is both first and last
+      WHEN s.session_source = f.first_touch_source AND s.session_source = l.last_touch_source THEN 
+        CASE 
+          WHEN c.session_count = 1 THEN 1.0  -- It's both first and last because it's the only touchpoint
+          ELSE 0.8  -- It gets both the first-touch (0.4) and last-touch (0.4) weights
+        END
       WHEN s.session_source = f.first_touch_source THEN 0.4  -- 40% to first touch
       WHEN s.session_source = l.last_touch_source THEN 0.4  -- 40% to last touch
-      WHEN c.session_count > 2 THEN 0.2 / (c.session_count - 2)  -- Distribute 20% across middle touchpoints if more than 2 sessions
-      ELSE 0  -- Handles the case when session_count = 2 but it's neither first nor last touch (shouldn't happen)
+      ELSE 
+        CASE
+          WHEN c.session_count > 2 THEN 0.2 / (c.session_count - 2)  -- Distribute 20% evenly across middle touchpoints
+          ELSE 0  -- No middle touchpoints in a 2-session journey
+        END
     END AS attribution_weight
   FROM session_sources s
   JOIN session_counts c ON s.shopifyOrderId = c.shopifyOrderId
@@ -167,19 +174,44 @@ session_attribution AS (
   JOIN last_touch l ON s.shopifyOrderId = l.shopifyOrderId
 ),
 
--- Step 11: Calculate attributed revenue by source and month
-monthly_source_attribution AS (
+-- Step 11: Normalize weights to ensure they sum to exactly 1.0 per order
+session_attribution AS (
+  SELECT
+    *,
+    attribution_weight / NULLIF(SUM(attribution_weight) OVER (PARTITION BY shopifyOrderId), 0) AS normalized_weight
+  FROM session_attribution_raw
+),
+
+total_source_attribution AS (
   SELECT
     session_source AS source,
-    order_month,
-    ROUND(SUM(attribution_weight * order_total), 0) AS attributed_revenue
+    ROUND(SUM(normalized_weight * order_total), 2) AS attributed_revenue
   FROM session_attribution
-  GROUP BY session_source, order_month
+  GROUP BY session_source
+),
+
+-- Step 12: Rank sources by revenue
+ranked_sources AS (
+  SELECT
+    source,
+    attributed_revenue,
+    ROW_NUMBER() OVER (ORDER BY attributed_revenue DESC) AS revenue_rank
+  FROM total_source_attribution
 )
 
--- Final results in pivot table format using PIVOT
-SELECT * FROM monthly_source_attribution
-PIVOT (
-  SUM(attributed_revenue) FOR order_month IN ('2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06')
-)
-ORDER BY 2 DESC
+-- Final output with top 9 and others grouped
+SELECT 
+  CASE 
+    WHEN revenue_rank <= 9 THEN source
+    ELSE 'Others'
+  END AS source_group,
+  SUM(attributed_revenue) AS attributed_revenue,
+  ROUND(SUM(attributed_revenue) / SUM(SUM(attributed_revenue)) OVER(), 2) AS percentage_total
+FROM ranked_sources
+GROUP BY 
+  CASE 
+    WHEN revenue_rank <= 9 THEN source
+    ELSE 'Others'
+  END
+ORDER BY 
+  CASE WHEN source_group = 'Others' THEN 0 ELSE attributed_revenue END DESC
